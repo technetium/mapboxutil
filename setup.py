@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="mapboxutil",
-    version="1.0.0,
+    version="1.0.0",
     author="Toni Cornelissen",
     author_email="mapboxutil@technetium.be",
     description="Module with utility functions to generate static choropleth maps with Mapbox",
