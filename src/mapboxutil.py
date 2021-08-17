@@ -5,8 +5,9 @@ especially to create static choropleth map images.
 import hashlib
 import json
 import math
+import random
 import requests
-#from pprint import pprint
+import urllib.request
 
 
 _MAPBOX_PUBLIC_KEY = 'pk.Use set_mapbox_token to set the public key' # aRandomString0f5ixtySevenUpperAndL0werCaseCharactersAndNumb3rsPo1nt.andThenYet1other22M0re
@@ -114,6 +115,7 @@ def mapbox_url(
     , zoom = 0
     , overlays = []
     , access_token = None
+    , test = False
 ):
     """
     Generates the url for the static mapbox image.
@@ -126,8 +128,17 @@ def mapbox_url(
     :param zoom:            The zoom level used in the map
     :param overlays:        An array of overlays that will be added to the map
     :param access_token:    The MapBox public access token
-    :return:    url to ret
+    :param test:            Test flag
+    :return:                The url to retreive the maxbox image
     """
+
+    # if the test flag is set, make a very small change
+    # to the latitude and longitude to bust Mapbox' cache
+    if test:
+        latitude = latitude + random.uniform(-1E-9, 1E-9)
+        longitude = longitude + random.uniform(-1E-9, 1E-9)
+
+
     if not access_token: access_token = _MAPBOX_PUBLIC_KEY
     overlay = ','.join(overlays)
     if overlay: overlay += '/'
@@ -167,6 +178,13 @@ def post_request(url, data):
     return r.json()
 
 
+def write_url(url, filename):
+    with urllib.request.urlopen(url) as f:
+        img = f.read()
+    with open(filename, 'wb') as f:
+        f.write(img)
+
+
 ###################
 ### Style stuff ###
 ###################
@@ -194,12 +212,13 @@ def delete_style(username, style_id):
         _MAPBOX_SECRET_KEY,
     ))
 
-def get_style(username, style_id):
+def get_style(username, style_id, draft = False):
     """Retreive a style."""
-    return get_request('https://api.mapbox.com/styles/v1/%s/%s?access_token=%s' % (
+    return get_request('https://api.mapbox.com/styles/v1/%s/%s?access_token=%s%s' % (
         username,
         style_id,
         _MAPBOX_SECRET_KEY,
+        '&draft' if draft else ''
     ))
 
 def update_style(username, style_id, style):
@@ -210,9 +229,9 @@ def update_style(username, style_id, style):
         _MAPBOX_SECRET_KEY,
     ), style)
 
-def get_style_id_by_name(name, styles = None, username = DEFAULT_USERNAME):
+def get_style_id_by_name(name, styles = None, username = DEFAULT_USERNAME, draft = False):
     """Get a style id by it's name."""
-    styles = styles or get_styles(username)
+    styles = styles or get_styles(username, draft)
     return ([x.get('id') for x in styles if name == x.get('name')] or [None])[0]
 
 def make_style(
@@ -220,10 +239,11 @@ def make_style(
     , sources = {}
     , layers = []
     , version = 8
+    , draft = False  
 ):
     """Make a style."""
     return {
-        'draft': False,
+        'draft': draft,
         'name': name,
         'layers': layers,
         'metadata': {},
@@ -242,37 +262,106 @@ def add_sources(source_ids, sources = None):
     }
     return sources
 
-def make_layer(source_layer, paint, filter = None):
+#__LAYER_HASHES = []
+
+def make_layer(
+    source_layer = '',
+    paint = None,
+    filter = None,
+    type = 'fill'
+):
     """Make a layer."""
     hash = hashlib.sha224(json.dumps(locals()).encode()).hexdigest()
+    #if hash in __LAYER_HASHES:
+    #    raise Exception('Duplicate Layer: ' + json.dumps(locals()))
+    #__LAYER_HASHES.append(hash)
+    
     layer = {
         'id': 'layer%s' % (hash, ),
-        'paint': paint,
+        'paint': validate(paint, type),
+        'layout': validate(paint, type, 'layout'),
         'source': 'composite',
         'source-layer': source_layer,
-        'type': 'fill',
+        'type': type,
     }
+    if 'background' == type:
+        del layer['source']
+        del layer['source-layer']
+
     if filter:
         layer['filter'] = filter
     return layer
 
+def validate(data, type='fill', property='paint'):
+    """
+    Create a valid dict according to the type and property.
+
+    Use underscores for dashed keywords eg. fill_color for fill-color
+    you can use both short and long form: color will be expanded to
+    fill-color when the type is fill and line color when the type is line.
+
+    Positional arguments can also be used. The first one is always color,
+    the second one an other common argument as defined in the secondary dict,
+    the third one is opacity.
+
+    Allowed keywords are defined in the allowed dict.
+    """
+
+    # Possible types
+    # fill, line, background,
+    # to be implemented:
+    # symbol, circle, heatmap, fill-extrusion, raster, hillshade, sky
+
+    # Define the allowed attributes
+    allowed = {
+        'background': {
+            'paint': ('background-color', 'background-opacity,'),
+        },
+        'fill': {
+            'paint': ('fill-color', 'fill-opacity', 'fill-outline-color', ),
+        },
+        'line': {
+            'layout': ('line-cap', 'line-join'),
+            'paint': ('line-color', 'line-dasharray', 'line-opacity', 'line-width', ),
+        },
+    }
+    # Define the parameter name of the secondary argument
+    secondary = {
+        'fill': 'fill-outline-color',
+        'line': 'line-width',
+    }
+    default = {
+        'line-cap': 'round',
+        'line-join': 'round',
+    }
+
+    data = { key.replace('_', '-'): value for key, value in data.items() }
+    data = {**{ type+'-'+key: value for key, value in data.items() }, **data }
+    if data.get('secondary') and secondary.get(type) and secondary.get(type) not in data:
+        data[secondary[type]] = data['secondary']
+    for key, value in default.items():
+        if not key in data:
+            data[key] = value
+    return { key: value for (key,value) in data.items() if key in allowed.get(type, {}).get(property, ()) }
+
 def make_paint(
-    fill_color = None
-    , fill_outline_color = None
-    , fill_opacity = None
+    color = None
+    , secondary = None
+    , opacity = None
+    , **kwargs
 ):
-    """Make a paint property."""
-    paint = {}
-    if fill_color: paint['fill-color'] = fill_color
-    if fill_outline_color: paint['fill-outline-color'] = fill_outline_color
-    if fill_opacity: paint['fill-opacity'] = fill_opacity
+    """Make a paint property. Will also be used for layout."""
+    paint = kwargs
+    if None is not color: paint['color'] = color
+    if None is not secondary: paint['secondary'] = secondary
+    if None is not opacity: paint['opacity'] = opacity
     return paint
 
-def make_filter(value = 0, key = 'id'):
+def make_filter(value = 0, key = 'id', relation = True):
     """Make a filter."""
     if key == 'id': id = ['id']
     else: id = ['get', key]
-    return ['match', id, value, True, False]
+    return ['match', id, value, relation ^ False, relation ^ True]
 
 # Messages still reported by pylint:
 # pylint -dC0103,C0122,C0301,C0321,C0326,C0330,R0913,W0102,W0603,W0622,W0613,W0641 mapboxutil.py

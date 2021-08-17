@@ -1,11 +1,11 @@
-import setuptools
+gimport setuptools
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
     name="mapboxutil",
-    version="1.0.0",
+    version="1.1.0",
     author="Toni Cornelissen",
     author_email="mapboxutil@technetium.be",
     description="Module with utility functions to generate static choropleth maps with Mapbox",

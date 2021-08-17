@@ -110,3 +110,19 @@ url = mapbox_url(
 # Print the url
 print(url)
 ```
+
+
+## Version history
+
+### v1.1.0
+
+- Add ```draft``` parameter to get_style functions. (```get_style```, ```get_styles```, ````get_style_id_by_name```)
+- Add ```relation``` parameter to ```make_filter``` function, when set to false it will exculde the matching polygons.
+- Add ```test``` parameter to ```mapbox_url```: Prevents mapbox caching when designing maps.
+- Add ```type``` to ```make_layer```: ```fill``` (default), ```background``` and ```line``` are implemented.
+- ```make_paint``` accepts more parameters: To have the appropriate parameters for each layer type.
+
+### v1.0.0
+
+- Initial version
+

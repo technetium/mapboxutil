@@ -63,12 +63,13 @@ def delete_style(username, style_id):
         _MAPBOX_SECRET_KEY,
     ))
 
-def get_style(username, style_id):
+def get_style(username, style_id, draft = False):
     """Retreive a style."""
-    return get_request('https://api.mapbox.com/styles/v1/%s/%s?access_token=%s' % (
+    return get_request('https://api.mapbox.com/styles/v1/%s/%s?access_token=%s%s' % (
         username,
         style_id,
         _MAPBOX_SECRET_KEY,
+        '&draft' if draft else ''
     ))
 
 def update_style(username, style_id, style):
@@ -95,14 +96,15 @@ The function below will make a basic style:
 
 ```python
 def make_style(
-    """Make a style."""
     name = ''
     , sources = {}
     , layers = []
     , version = 8
+    , draft = False  
 ):
+    """Make a style."""
     return {
-        'draft': False,
+        'draft': draft,
         'name': name,
         'layers': layers,
         'metadata': {},
@@ -151,40 +153,69 @@ Layers, created from sources that have to be painted.
 The following functions are used to create those.
 
 ```python
-def add_sources(source_ids, sources = {}):
-    """Add an array of source ids to the dict sources and return it."""
-    url = sources.get('composite', {}).get('url', '')
-    url += ',' if url else 'mapbox://'
-    sources['composite'] = {
-        'type': 'vector',
-        'url': url + ','.join(source_ids),
-    }
-    return sources
+def validate(data, type='fill', property='paint'):
+    """
+    Create a valid dict according to the type and property.
 
-def make_layer(source_layer, paint, filter = None):
-    """Make a layer."""
-    hash = hashlib.sha224(json.dumps(locals()).encode()).hexdigest()
-    layer = {
-        'id': 'layer%s' % (hash, ),
-        'paint': paint,
-        'source': 'composite',
-        'source-layer': source_layer,
-        'type': 'fill',
+    Use underscores for dashed keywords eg. fill_color for fill-color
+    you can use both short and long form: color will be expanded to
+    fill-color when the type is fill and line color when the type is line.
+
+    Positional arguments can also be used. The first one is always color,
+    the second one an other common argument as defined in the secondary dict,
+    the third one is opacity.
+
+    Allowed keywords are defined in the allowed dict.
+    """
+
+    # Possible types
+    # fill, line, background,
+    # to be implemented:
+    # symbol, circle, heatmap, fill-extrusion, raster, hillshade, sky
+
+    # Define the allowed attributes
+    allowed = {
+        'background': {
+            'paint': ('background-color', 'background-opacity,'),
+        },
+        'fill': {
+            'paint': ('fill-color', 'fill-opacity', 'fill-outline-color', ),
+        },
+        'line': {
+            'layout': ('line-cap', 'line-join'),
+            'paint': ('line-color', 'line-dasharray', 'line-opacity', 'line-width', ),
+        },
     }
-    if filter:
-        layer['filter'] = filter
-    return layer
+    # Define the parameter name of the secondary argument
+    secondary = {
+        'fill': 'fill-outline-color',
+        'line': 'line-width',
+    }
+    default = {
+        'line-cap': 'round',
+        'line-join': 'round',
+    }
+
+    data = { key.replace('_', '-'): value for key, value in data.items() }
+    data = {**{ type+'-'+key: value for key, value in data.items() }, **data }
+    if data.get('secondary') and secondary.get(type) and secondary.get(type) not in data:
+        data[secondary[type]] = data['secondary']
+    for key, value in default.items():
+        if not key in data:
+            data[key] = value
+    return { key: value for (key,value) in data.items() if key in allowed.get(type, {}).get(property, ()) }
 
 def make_paint(
-    fill_color = None
-    , fill_outline_color = None
-    , fill_opacity = None
+    color = None
+    , secondary = None
+    , opacity = None
+    , **kwargs
 ):
-    """Make a paint property."""
-    paint = {}
-    if fill_color: paint['fill-color'] = fill_color
-    if fill_outline_color: paint['fill-outline-color'] = fill_outline_color
-    if fill_opacity: paint['fill-opacity'] = fill_opacity
+    """Make a paint property. Will also be used for layout."""
+    paint = kwargs
+    if None is not color: paint['color'] = color
+    if None is not secondary: paint['secondary'] = secondary
+    if None is not opacity: paint['opacity'] = opacity
     return paint
 ```
 
@@ -225,10 +256,11 @@ so only the country matching that filter will be shown.
 
 The following code will generate the filter that can be added to the layer:
 ```python
-def make_filter(value = 0, key = 'id'):
+def make_filter(value = 0, key = 'id', relation = True):
+    """Make a filter."""
     if key == 'id': id = ['id']
-    else: id = ['get', key]    
-    return ['match', id, value, True, False]
+    else: id = ['get', key]
+    return ['match', id, value, relation ^ False, relation ^ True]
 ```
 
 Like this:
@@ -274,6 +306,46 @@ style['layers'] = style['layers'] + [
     ),
 ]
 style = update_style(username, style['id'], style)
+```
+
+Since vestion 1.1.0 more layer types than just the fill type are possible.
+The line type gives the posibility to create borders of a different width
+than the standard one pixel that the fill type uses:
+
+```
+border_width = 2.5
+style['layers'] = style['layers'] + [
+    make_layer(
+        source_name,
+        make_paint('#006', border_width),
+        make_filter(46),
+        'line'
+    ),
+    make_layer(
+        source_name,
+        make_paint('#600', border_width),
+        [
+            "all",
+            make_filter('China', 'name_en'),
+            make_filter('China', 'NAME'),
+        ],
+        'line',
+    ),
+    make_layer(
+        # use named parameter to have arguments in arbitrary order
+        type = 'line',
+        paint = make_paint(width = border_width, color = '#660'),
+        filter = make_filter('AU', 'iso_3166_1'),
+        source_layer = source_name,
+    ),
+    make_layer(
+        source_name,
+        # fully named parameters use underscores
+        make_paint(line_width = border_width, line_color = '#060'),
+        make_filter('ESP', 'ISO_A3'),
+        'line'
+    ),
+]
 ```
 
 This will give the following style:

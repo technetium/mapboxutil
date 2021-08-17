@@ -11,5 +11,6 @@ Here such alternative is discussed with using styled [shapefiles](https://en.wik
  - Then we write (python) code to create a [style](style.md)
  - And use the style to create a [static map](static.md)
  - Create a choropleth map of [geocaching](geocaching.md) founds, as an example of the usage of external data
+ - To demo the line type in v1.1.0 create an [European](geocaching_eu.md) map of geocache founds with county subdivisions.
 
 

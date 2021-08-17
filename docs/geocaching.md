@@ -2,8 +2,8 @@
 
 ## Creating Choropleth maps of geocache finds  
 
-The reason developed this module is because I want to update my geocaching profile with a colourful map.
-You can get a so called pocked query of all the caches you have found.
+The reason developed this module is that I want to update my geocaching profile with a colourful map.
+You can get a so-called pocket query of all the caches you have found.
 A pocket query results in a [GPX-file](https://en.wikipedia.org/wiki/GPS_Exchange_Format).
 
 <!--
@@ -18,7 +18,8 @@ containing a list of waypoints of all those caches.
 -->
 
 Since a GPX-file is a [XML-file](https://en.wikipedia.org/wiki/XML),
-the data can be extracted with ElementTree:
+the data can be extracted with 
+[ElementTree](https://docs.python.org/3/library/xml.etree.elementtree.html):
 
 ```python
 import xml.etree.ElementTree as ET
@@ -58,6 +59,8 @@ to generate a set of coloured layers
 and use that in a style.
 
 ```python
+from mapboxutil import *
+
 # define the name and id of the tileset
 tileset_id = 'yourusername.t1ls3tid'
 source_name = 'ne_10m_admin_0_countries-uniqid'
