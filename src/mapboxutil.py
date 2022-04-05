@@ -236,8 +236,8 @@ def get_style_id_by_name(name, styles = None, username = DEFAULT_USERNAME, draft
 
 def make_style(
     name = ''
-    , sources = {}
-    , layers = []
+    , sources = None
+    , layers = None
     , version = 8
     , draft = False  
 ):
@@ -245,9 +245,9 @@ def make_style(
     return {
         'draft': draft,
         'name': name,
-        'layers': layers,
+        'layers': layers if layers else [],
         'metadata': {},
-        'sources': sources,
+        'sources': sources if sources else {},
         'version': version,
     }
 
